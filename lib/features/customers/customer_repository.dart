@@ -44,15 +44,6 @@ class CustomerRepository {
   Future<void> delete(String id) async {
     await supabase.from('customers').delete().eq('id', id);
   }
-
-  Future<Map<String, dynamic>> fetchStats(String customerId) async {
-    final rows = await supabase
-        .from('sales')
-        .select('total')
-        .eq('customer_id', customerId);
-    final total = rows.fold<num>(0, (sum, row) => sum + (row['total'] as num));
-    return {'count': rows.length, 'total': total};
-  }
 }
 
 final customerRepository = CustomerRepository();

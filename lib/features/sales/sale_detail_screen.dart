@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/utils/formatters.dart';
+import '../shipping/shipping_provider.dart';
 import 'receipt.dart';
 import 'sale_model.dart';
 
@@ -19,8 +20,17 @@ class SaleDetailScreen extends StatelessWidget {
           _InfoRow(label: 'Tanggal', value: formatDateTime(sale.createdAt)),
           _InfoRow(label: 'Kasir', value: sale.cashierName ?? '-'),
           _InfoRow(label: 'Pembeli', value: sale.customerName ?? 'Umum'),
+          _InfoRow(label: 'Pembayaran', value: sale.paymentMethod == 'cash' ? 'Cash' : 'QRIS'),
+          if (sale.paymentMethod == 'cash' && sale.amountPaid != null) ...[
+            _InfoRow(label: 'Diterima', value: formatRupiah(sale.amountPaid!)),
+            _InfoRow(label: 'Kembalian', value: formatRupiah(sale.change ?? 0)),
+          ],
           if (sale.needsShipping)
-            _InfoRow(label: 'Status Pengiriman', value: sale.shippingStatus),
+            _InfoRow(label: 'Status Pengiriman', value: shippingStatusLabel(sale.shippingStatus)),
+          if (sale.assignedToName != null)
+            _InfoRow(label: 'Ditugaskan Ke', value: sale.assignedToName!),
+          if (sale.deliveredByName != null)
+            _InfoRow(label: 'Diantar Oleh', value: sale.deliveredByName!),
           const Divider(height: 32),
           Text('Barang', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),

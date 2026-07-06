@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'customer_form_dialog.dart';
+import 'customer_history_sheet.dart';
 import 'customer_model.dart';
 import 'customer_provider.dart';
 import 'customer_repository.dart';
@@ -93,7 +94,12 @@ class CustomerListScreen extends ConsumerWidget {
                             if (customer.phone != null) customer.phone!,
                             if (customer.address != null) customer.address!,
                           ].join(' • ')),
-                          onTap: () => showCustomerFormDialog(context, customer: customer),
+                          trailing: IconButton(
+                            tooltip: 'Edit',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => showCustomerFormDialog(context, customer: customer),
+                          ),
+                          onTap: () => showCustomerHistorySheet(context, customer),
                           onLongPress: () => _confirmDelete(context, ref, customer),
                         ),
                       );

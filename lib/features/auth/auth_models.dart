@@ -1,9 +1,11 @@
 enum UserRole {
   admin,
-  kasir;
+  kasir,
+  pegawai;
 
   static UserRole fromString(String value) => switch (value) {
         'admin' => UserRole.admin,
+        'pegawai' => UserRole.pegawai,
         _ => UserRole.kasir,
       };
 }
@@ -26,4 +28,5 @@ class AppProfile {
       );
 
   bool get isAdmin => role == UserRole.admin;
+  bool get isPegawai => role == UserRole.pegawai;
 }

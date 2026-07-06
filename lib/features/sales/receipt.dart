@@ -52,6 +52,24 @@ Future<Uint8List> buildReceiptPdf(Sale sale) async {
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ],
             ),
+            pw.SizedBox(height: 4),
+            pw.Text('Pembayaran: ${sale.paymentMethod == 'cash' ? 'Cash' : 'QRIS'}'),
+            if (sale.paymentMethod == 'cash' && sale.amountPaid != null) ...[
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Diterima'),
+                  pw.Text(formatRupiah(sale.amountPaid!)),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Kembalian'),
+                  pw.Text(formatRupiah(sale.change ?? 0)),
+                ],
+              ),
+            ],
             pw.SizedBox(height: 12),
             pw.Center(child: pw.Text('Terima kasih')),
           ],

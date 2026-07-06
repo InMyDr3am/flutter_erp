@@ -10,7 +10,10 @@ import 'core/config/env.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: '.env');
+  // Named "app.env" (no leading dot) rather than the conventional ".env" —
+  // Android's default asset packaging silently drops any file/folder whose
+  // name starts with a dot, which would otherwise break release builds.
+  await dotenv.load(fileName: 'app.env');
   await initializeDateFormatting('id_ID');
 
   await Supabase.initialize(

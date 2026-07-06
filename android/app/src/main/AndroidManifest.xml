@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Needed for every build type (not just debug/profile) since the app
+         itself talks to Supabase over the network, not just Flutter's dev
+         tooling. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="flutter_erp"
         android:name="${applicationName}"

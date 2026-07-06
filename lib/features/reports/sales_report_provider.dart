@@ -14,5 +14,10 @@ final salesReportFilterProvider = StateProvider<SaleHistoryFilter>(
 
 final salesReportProvider = FutureProvider<List<Sale>>((ref) {
   final filter = ref.watch(salesReportFilterProvider);
-  return saleRepository.fetchHistory(from: filter.from, to: filter.to);
+  return saleRepository.fetchHistory(
+    from: filter.from,
+    to: filter.to,
+    customerId: filter.customerId,
+    cashierId: filter.cashierId,
+  );
 });

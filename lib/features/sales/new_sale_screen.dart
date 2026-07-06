@@ -9,6 +9,7 @@ import 'cart_provider.dart';
 import 'cart_sheet.dart';
 
 final _saleProductSearchProvider = StateProvider<String>((ref) => '');
+final _saleCategoryFilterProvider = StateProvider<String?>((ref) => null);
 
 class NewSaleScreen extends ConsumerWidget {
   const NewSaleScreen({super.key});
@@ -16,7 +17,9 @@ class NewSaleScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final productsAsync = ref.watch(productsProvider);
+    final categoriesAsync = ref.watch(categoriesProvider);
     final query = ref.watch(_saleProductSearchProvider).trim().toLowerCase();
+    final categoryId = ref.watch(_saleCategoryFilterProvider);
     final cartCount = ref.watch(cartProvider).length;
     final cartTotal = ref.watch(cartTotalProvider);
 
@@ -34,14 +37,37 @@ class NewSaleScreen extends ConsumerWidget {
                   ref.read(_saleProductSearchProvider.notifier).state = value,
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: categoriesAsync.maybeWhen(
+              data: (categories) => DropdownButtonFormField<String?>(
+                initialValue: categoryId,
+                decoration: const InputDecoration(
+                  labelText: 'Kategori',
+                  isDense: true,
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
+                  for (final category in categories)
+                    DropdownMenuItem(value: category.id, child: Text(category.name)),
+                ],
+                onChanged: (value) =>
+                    ref.read(_saleCategoryFilterProvider.notifier).state = value,
+              ),
+              orElse: () => const SizedBox.shrink(),
+            ),
+          ),
           Expanded(
             child: productsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => Center(child: Text('Gagal memuat barang: $error')),
               data: (products) {
-                final filtered = query.isEmpty
-                    ? products
-                    : products.where((p) => p.name.toLowerCase().contains(query)).toList();
+                final filtered = products.where((p) {
+                  if (query.isNotEmpty && !p.name.toLowerCase().contains(query)) return false;
+                  if (categoryId != null && p.categoryId != categoryId) return false;
+                  return true;
+                }).toList();
 
                 if (filtered.isEmpty) {
                   return const Center(child: Text('Barang tidak ditemukan'));
@@ -69,7 +95,11 @@ class NewSaleScreen extends ConsumerWidget {
                         trailing: outOfStock
                             ? const Chip(label: Text('Habis'))
                             : IconButton.filled(
-                                icon: const Icon(Icons.add),
+                                icon: const Icon(Icons.add, size: 26),
+                                style: IconButton.styleFrom(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Colors.white,
+                                ),
                                 onPressed: () =>
                                     ref.read(cartProvider.notifier).addProduct(product),
                               ),

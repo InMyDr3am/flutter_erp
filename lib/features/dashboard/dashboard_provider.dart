@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/config/supabase_client.dart';
 import '../../core/widgets/stock_status.dart';
+import '../expenses/expense_repository.dart';
 import '../products/product_model.dart';
 import '../products/product_provider.dart';
+import '../restocks/restock_repository.dart';
 
 class DailySales {
   const DailySales({required this.date, required this.total, required this.count});
@@ -164,4 +166,39 @@ final stockAlertsProvider = Provider<AsyncValue<List<Product>>>((ref) {
     });
     return alerts;
   });
+});
+
+class ProfitLoss {
+  const ProfitLoss({
+    required this.revenue,
+    required this.expenses,
+    required this.restockCost,
+  });
+
+  final num revenue;
+  final num expenses;
+  final num restockCost;
+
+  num get net => revenue - expenses - restockCost;
+}
+
+final monthlyProfitLossProvider = FutureProvider<ProfitLoss>((ref) async {
+  final now = DateTime.now();
+  final monthStart = DateTime(now.year, now.month, 1);
+
+  final (sales, expenses, restocks) = await (
+    ref.watch(dailySalesProvider.future),
+    expenseRepository.fetchAll(from: monthStart, to: now),
+    restockRepository.fetchAll(from: monthStart, to: now),
+  ).wait;
+
+  final revenue = sales
+      .where((s) => !s.date.isBefore(monthStart))
+      .fold<num>(0, (sum, s) => sum + s.total);
+
+  return ProfitLoss(
+    revenue: revenue,
+    expenses: expenses.fold<num>(0, (sum, e) => sum + e.amount),
+    restockCost: restocks.fold<num>(0, (sum, r) => sum + r.subtotal),
+  );
 });

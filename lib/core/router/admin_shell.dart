@@ -17,11 +17,6 @@ const adminDestinations = [
     selectedIcon: Icons.inventory_2,
   ),
   ShellDestination(
-    label: 'Pembeli',
-    icon: Icons.people_outline,
-    selectedIcon: Icons.people,
-  ),
-  ShellDestination(
     label: 'Riwayat',
     icon: Icons.receipt_long_outlined,
     selectedIcon: Icons.receipt_long,
@@ -30,6 +25,11 @@ const adminDestinations = [
     label: 'Laporan',
     icon: Icons.bar_chart_outlined,
     selectedIcon: Icons.bar_chart,
+  ),
+  ShellDestination(
+    label: 'Lainnya',
+    icon: Icons.more_horiz_outlined,
+    selectedIcon: Icons.more_horiz,
   ),
 ];
 
@@ -40,12 +40,14 @@ class AdminShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(currentProfileProvider).value;
+    // unwrapPrevious() avoids briefly guarding based on a stale profile
+    // (e.g. a previous kasir session) while a freshly logged-in user's
+    // profile is still being fetched.
+    final profile = ref.watch(currentProfileProvider).unwrapPrevious().value;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (profile != null && !profile.isAdmin) {
-        context.go('/kasir/sale');
-      }
+      if (profile == null || profile.isAdmin) return;
+      context.go(profile.isPegawai ? '/pegawai/shipments' : '/kasir/sale');
     });
 
     return AppShell(

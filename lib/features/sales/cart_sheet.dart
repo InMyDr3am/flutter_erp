@@ -24,10 +24,28 @@ class CartSheet extends ConsumerStatefulWidget {
 
 class _CartSheetState extends ConsumerState<CartSheet> {
   bool _submitting = false;
+  String _paymentMethod = 'cash';
+  final _amountPaidController = TextEditingController();
+
+  @override
+  void dispose() {
+    _amountPaidController.dispose();
+    super.dispose();
+  }
+
+  num? get _amountPaid => num.tryParse(_amountPaidController.text);
 
   Future<void> _submit() async {
     final items = ref.read(cartProvider);
     if (items.isEmpty) return;
+
+    final total = ref.read(cartTotalProvider);
+    if (_paymentMethod == 'cash' && (_amountPaid == null || _amountPaid! < total)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nominal diterima kurang dari total belanja')),
+      );
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
@@ -40,6 +58,8 @@ class _CartSheetState extends ConsumerState<CartSheet> {
         items: items,
         needsShipping: needsShipping,
         shippingNote: note.isEmpty ? null : note,
+        paymentMethod: _paymentMethod,
+        amountPaid: _paymentMethod == 'cash' ? _amountPaid : null,
       );
 
       final sale = await saleRepository.fetchDetail(saleId);
@@ -108,7 +128,13 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                                       .read(cartProvider.notifier)
                                       .setQty(item.product.id, item.qty - 1),
                                 ),
-                                Text('${item.qty}'),
+                                _QtyField(
+                                  key: ValueKey(item.product.id),
+                                  qty: item.qty,
+                                  onChanged: (value) => ref
+                                      .read(cartProvider.notifier)
+                                      .setQty(item.product.id, value),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.add_circle_outline),
                                   onPressed: () => ref
@@ -149,6 +175,37 @@ class _CartSheetState extends ConsumerState<CartSheet> {
                   onChanged: (value) =>
                       ref.read(cartShippingNoteProvider.notifier).state = value,
                 ),
+              const SizedBox(height: 12),
+              Text('Metode Pembayaran', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'cash', label: Text('Cash'), icon: Icon(Icons.payments_outlined)),
+                  ButtonSegment(value: 'qris', label: Text('QRIS'), icon: Icon(Icons.qr_code)),
+                ],
+                selected: {_paymentMethod},
+                onSelectionChanged: (selection) => setState(() => _paymentMethod = selection.first),
+              ),
+              if (_paymentMethod == 'cash') ...[
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _amountPaidController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Nominal Diterima'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Kembalian'),
+                    Text(
+                      formatRupiah((_amountPaid ?? 0) - total > 0 ? (_amountPaid ?? 0) - total : 0),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -175,6 +232,71 @@ class _CartSheetState extends ConsumerState<CartSheet> {
           ),
         );
       },
+    );
+  }
+}
+
+/// A tappable quantity display that turns into a direct numeric input, so
+/// buying e.g. 50 units doesn't require tapping "+" fifty times.
+class _QtyField extends StatefulWidget {
+  const _QtyField({super.key, required this.qty, required this.onChanged});
+
+  final num qty;
+  final ValueChanged<num> onChanged;
+
+  @override
+  State<_QtyField> createState() => _QtyFieldState();
+}
+
+class _QtyFieldState extends State<_QtyField> {
+  late final _controller = TextEditingController(text: _formatQty(widget.qty));
+  late final _focusNode = FocusNode()..addListener(_onFocusChange);
+
+  String _formatQty(num qty) => qty == qty.roundToDouble() ? qty.toInt().toString() : qty.toString();
+
+  void _onFocusChange() {
+    if (!_focusNode.hasFocus) _commit();
+  }
+
+  void _commit() {
+    final value = num.tryParse(_controller.text);
+    if (value != null && value > 0) {
+      widget.onChanged(value);
+    } else {
+      _controller.text = _formatQty(widget.qty);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _QtyField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.qty != widget.qty && !_focusNode.hasFocus) {
+      _controller.text = _formatQty(widget.qty);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 52,
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        textAlign: TextAlign.center,
+        keyboardType: const TextInputType.numberWithOptions(),
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(vertical: 8),
+        ),
+        onSubmitted: (_) => _commit(),
+      ),
     );
   }
 }

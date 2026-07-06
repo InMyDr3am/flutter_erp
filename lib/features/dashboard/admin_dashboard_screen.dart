@@ -99,6 +99,75 @@ class AdminDashboardScreen extends ConsumerWidget {
                     _StockAlertSection(async: stockAlertsAsync),
                   ],
                 ),
+          const SizedBox(height: 16),
+          Consumer(
+            builder: (context, ref, _) {
+              final profitLossAsync = ref.watch(monthlyProfitLossProvider);
+              return _ProfitLossSection(async: profitLossAsync);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfitLossSection extends StatelessWidget {
+  const _ProfitLossSection({required this.async});
+
+  final AsyncValue<ProfitLoss> async;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Ringkasan Laba-Rugi (Bulan Ini)', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            async.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Text('Gagal memuat: $e'),
+              data: (pl) => Column(
+                children: [
+                  _PlRow(label: 'Pendapatan', value: pl.revenue),
+                  _PlRow(label: 'Pengeluaran', value: -pl.expenses),
+                  _PlRow(label: 'Belanja Bahan', value: -pl.restockCost),
+                  const Divider(),
+                  _PlRow(label: pl.net >= 0 ? 'Laba Bersih' : 'Rugi Bersih', value: pl.net, bold: true),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlRow extends StatelessWidget {
+  const _PlRow({required this.label, required this.value, this.bold = false});
+
+  final String label;
+  final num value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: bold ? 16 : 14);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text('${value < 0 ? '-' : ''}${formatRupiah(value.abs())}', style: style),
         ],
       ),
     );

@@ -5,31 +5,21 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/auth_provider.dart';
 import '../widgets/app_shell.dart';
 
-const kasirDestinations = [
-  ShellDestination(
-    label: 'Transaksi',
-    icon: Icons.point_of_sale_outlined,
-    selectedIcon: Icons.point_of_sale,
-  ),
-  ShellDestination(
-    label: 'Barang',
-    icon: Icons.inventory_2_outlined,
-    selectedIcon: Icons.inventory_2,
-  ),
-  ShellDestination(
-    label: 'Riwayat',
-    icon: Icons.receipt_long_outlined,
-    selectedIcon: Icons.receipt_long,
-  ),
+const pegawaiDestinations = [
   ShellDestination(
     label: 'Pengiriman',
     icon: Icons.local_shipping_outlined,
     selectedIcon: Icons.local_shipping,
   ),
+  ShellDestination(
+    label: 'Statistik',
+    icon: Icons.bar_chart_outlined,
+    selectedIcon: Icons.bar_chart,
+  ),
 ];
 
-class KasirShell extends ConsumerWidget {
-  const KasirShell({super.key, required this.navigationShell});
+class PegawaiShell extends ConsumerWidget {
+  const PegawaiShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
@@ -38,17 +28,13 @@ class KasirShell extends ConsumerWidget {
     final profile = ref.watch(currentProfileProvider).unwrapPrevious().value;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (profile == null) return;
-      if (profile.isAdmin) {
-        context.go('/admin/dashboard');
-      } else if (profile.isPegawai) {
-        context.go('/pegawai/shipments');
-      }
+      if (profile == null || profile.isPegawai) return;
+      context.go(profile.isAdmin ? '/admin/dashboard' : '/kasir/sale');
     });
 
     return AppShell(
       title: 'Mini ERP',
-      destinations: kasirDestinations,
+      destinations: pegawaiDestinations,
       currentIndex: navigationShell.currentIndex,
       onDestinationSelected: (index) => navigationShell.goBranch(
         index,

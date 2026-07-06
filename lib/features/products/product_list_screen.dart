@@ -47,7 +47,7 @@ class ProductListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isAdmin = ref.watch(currentProfileProvider).value?.isAdmin ?? false;
+    final isAdmin = ref.watch(currentProfileProvider).unwrapPrevious().value?.isAdmin ?? false;
     final productsAsync = ref.watch(filteredProductsProvider);
     final categoriesAsync = ref.watch(categoriesProvider);
 
@@ -72,6 +72,30 @@ class ProductListScreen extends ConsumerWidget {
                   ref.read(productSearchProvider.notifier).state = value,
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: categoriesAsync.maybeWhen(
+              data: (categories) {
+                final selected = ref.watch(productCategoryFilterProvider);
+                return DropdownButtonFormField<String?>(
+                  initialValue: selected,
+                  decoration: const InputDecoration(
+                    labelText: 'Kategori',
+                    isDense: true,
+                    prefixIcon: Icon(Icons.category_outlined),
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('Semua Kategori')),
+                    for (final category in categories)
+                      DropdownMenuItem(value: category.id, child: Text(category.name)),
+                  ],
+                  onChanged: (value) =>
+                      ref.read(productCategoryFilterProvider.notifier).state = value,
+                );
+              },
+              orElse: () => const SizedBox.shrink(),
+            ),
+          ),
           SizedBox(
             height: 44,
             child: ListView(
@@ -85,33 +109,6 @@ class ProductListScreen extends ConsumerWidget {
                 _StatusFilterChip(status: StockStatus.menipis, label: 'Menipis'),
                 const SizedBox(width: 8),
                 _StatusFilterChip(status: StockStatus.kritis, label: 'Kritis'),
-                const SizedBox(width: 12),
-                const VerticalDivider(),
-                const SizedBox(width: 4),
-                categoriesAsync.maybeWhen(
-                  data: (categories) => Consumer(
-                    builder: (context, ref, _) {
-                      final selected = ref.watch(productCategoryFilterProvider);
-                      return Row(
-                        children: [
-                          for (final category in categories) ...[
-                            ChoiceChip(
-                              label: Text(category.name),
-                              selected: selected == category.id,
-                              onSelected: (value) {
-                                ref
-                                    .read(productCategoryFilterProvider.notifier)
-                                    .state = value ? category.id : null;
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                        ],
-                      );
-                    },
-                  ),
-                  orElse: () => const SizedBox.shrink(),
-                ),
               ],
             ),
           ),
@@ -129,39 +126,16 @@ class ProductListScreen extends ConsumerWidget {
                   child: ListView.separated(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
                     itemCount: products.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
+                    separatorBuilder: (context, index) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final product = products[index];
-                      final status = stockStatusOf(
-                        stock: product.stock,
-                        minStock: product.minStock,
-                      );
-                      return Card(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Theme.of(context).dividerColor),
-                        ),
-                        child: ListTile(
-                          onTap: isAdmin
-                              ? () => showProductFormDialog(context, product: product)
-                              : null,
-                          title: Text(product.name),
-                          subtitle: Text(
-                            '${product.categoryName ?? '-'} • ${formatRupiah(product.sellPrice)} / ${product.unit}',
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              StockStatusBadge(status: status, dense: true),
-                              const SizedBox(height: 4),
-                              Text('${product.stock} ${product.unit}'),
-                            ],
-                          ),
-                          onLongPress: isAdmin
-                              ? () => _confirmDelete(context, ref, product)
-                              : null,
-                        ),
+                      return _ProductCard(
+                        product: product,
+                        isAdmin: isAdmin,
+                        onTap: isAdmin
+                            ? () => showProductFormDialog(context, product: product)
+                            : null,
+                        onDelete: () => _confirmDelete(context, ref, product),
                       );
                     },
                   ),
@@ -170,6 +144,115 @@ class ProductListScreen extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProductCard extends StatelessWidget {
+  const _ProductCard({
+    required this.product,
+    required this.isAdmin,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final Product product;
+  final bool isAdmin;
+  final VoidCallback? onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = stockStatusOf(stock: product.stock, minStock: product.minStock);
+    final theme = Theme.of(context);
+
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: status.color, width: 4)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      child: Icon(Icons.inventory_2_outlined, color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.name,
+                            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            product.categoryName ?? 'Tanpa kategori',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          formatRupiah(product.sellPrice),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        Text(
+                          '/ ${product.unit}',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    StockStatusBadge(status: status, dense: true),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${product.stock} ${product.unit} tersisa',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    if (isAdmin)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        tooltip: 'Hapus',
+                        icon: Icon(Icons.delete_outline, color: theme.colorScheme.error, size: 20),
+                        onPressed: onDelete,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

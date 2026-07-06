@@ -11,7 +11,11 @@ class AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profileAsync = ref.watch(currentProfileProvider);
+    // unwrapPrevious() strips the "keep previous value while reloading" data
+    // Riverpod normally carries over — without it, this would briefly show
+    // the previous session's role (e.g. still "kasir") while the new
+    // profile fetch for a freshly logged-in user is in flight.
+    final profileAsync = ref.watch(currentProfileProvider).unwrapPrevious();
 
     return profileAsync.when(
       loading: () => const Scaffold(
@@ -37,6 +41,8 @@ class AuthGate extends ConsumerWidget {
           if (!context.mounted) return;
           if (profile != null && profile.isAdmin) {
             context.go('/admin/dashboard');
+          } else if (profile != null && profile.isPegawai) {
+            context.go('/pegawai/shipments');
           } else {
             context.go('/kasir/sale');
           }

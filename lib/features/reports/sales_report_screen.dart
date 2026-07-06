@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/formatters.dart';
+import '../customers/customer_provider.dart';
 import '../sales/sale_history_provider.dart';
 import 'excel_export.dart';
 import 'sales_report_pdf.dart';
@@ -23,7 +24,7 @@ class SalesReportScreen extends ConsumerWidget {
     );
     if (range == null) return;
 
-    ref.read(salesReportFilterProvider.notifier).state = SaleHistoryFilter(
+    ref.read(salesReportFilterProvider.notifier).state = filter.copyWith(
       from: range.start,
       to: DateTime(range.end.year, range.end.month, range.end.day, 23, 59, 59),
     );
@@ -33,6 +34,8 @@ class SalesReportScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(salesReportProvider);
     final filter = ref.watch(salesReportFilterProvider);
+    final cashiersAsync = ref.watch(cashiersProvider);
+    final customersAsync = ref.watch(customersProvider);
 
     return Scaffold(
       body: Padding(
@@ -42,48 +45,82 @@ class SalesReportScreen extends ConsumerWidget {
           children: [
             Text('Laporan Penjualan', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            OutlinedButton.icon(
+              onPressed: () => _pickDateRange(context, ref, filter),
+              icon: const Icon(Icons.date_range_outlined),
+              label: Text(
+                filter.from != null && filter.to != null
+                    ? '${formatDate(filter.from!)} - ${formatDate(filter.to!)}'
+                    : 'Pilih periode',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: () => _pickDateRange(context, ref, filter),
-                  icon: const Icon(Icons.date_range_outlined),
-                  label: Text(
-                    filter.from != null && filter.to != null
-                        ? '${formatDate(filter.from!)} - ${formatDate(filter.to!)}'
-                        : 'Pilih periode',
+                Expanded(
+                  child: cashiersAsync.maybeWhen(
+                    data: (cashiers) => DropdownButtonFormField<String?>(
+                      initialValue: filter.cashierId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Kasir', isDense: true),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Semua Kasir')),
+                        for (final cashier in cashiers)
+                          DropdownMenuItem(value: cashier.id, child: Text(cashier.fullName)),
+                      ],
+                      onChanged: (value) => ref.read(salesReportFilterProvider.notifier).state =
+                          SaleHistoryFilter(from: filter.from, to: filter.to, customerId: filter.customerId, cashierId: value),
+                    ),
+                    orElse: () => const SizedBox.shrink(),
                   ),
                 ),
-                salesAsync.maybeWhen(
-                  data: (sales) => Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FilledButton.tonalIcon(
-                        onPressed: sales.isEmpty ? null : () => exportSalesToExcel(sales),
-                        icon: const Icon(Icons.grid_on_outlined),
-                        label: const Text('Export Excel'),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.icon(
-                        onPressed: sales.isEmpty
-                            ? null
-                            : () => showSalesReportPdfPreview(
-                                  context,
-                                  sales,
-                                  range: filter.from != null && filter.to != null
-                                      ? DateTimeRange(start: filter.from!, end: filter.to!)
-                                      : null,
-                                ),
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: const Text('Cetak / PDF'),
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: customersAsync.maybeWhen(
+                    data: (customers) => DropdownButtonFormField<String?>(
+                      initialValue: filter.customerId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Pembeli', isDense: true),
+                      items: [
+                        const DropdownMenuItem(value: null, child: Text('Semua Pembeli')),
+                        for (final customer in customers)
+                          DropdownMenuItem(value: customer.id, child: Text(customer.name)),
+                      ],
+                      onChanged: (value) => ref.read(salesReportFilterProvider.notifier).state =
+                          SaleHistoryFilter(from: filter.from, to: filter.to, cashierId: filter.cashierId, customerId: value),
+                    ),
+                    orElse: () => const SizedBox.shrink(),
                   ),
-                  orElse: () => const SizedBox.shrink(),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            salesAsync.maybeWhen(
+              data: (sales) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: sales.isEmpty ? null : () => exportSalesToExcel(sales),
+                    icon: const Icon(Icons.grid_on_outlined),
+                    label: const Text('Export Excel'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: sales.isEmpty
+                        ? null
+                        : () => showSalesReportPdfPreview(
+                              context,
+                              sales,
+                              range: filter.from != null && filter.to != null
+                                  ? DateTimeRange(start: filter.from!, end: filter.to!)
+                                  : null,
+                            ),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Cetak / PDF'),
+                  ),
+                ],
+              ),
+              orElse: () => const SizedBox.shrink(),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -101,25 +138,28 @@ class SalesReportScreen extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('Invoice')),
-                              DataColumn(label: Text('Tanggal')),
-                              DataColumn(label: Text('Pembeli')),
-                              DataColumn(label: Text('Kasir')),
-                              DataColumn(label: Text('Total'), numeric: true),
-                            ],
-                            rows: [
-                              for (final sale in sales)
-                                DataRow(cells: [
-                                  DataCell(Text(sale.invoiceNo)),
-                                  DataCell(Text(formatDateTime(sale.createdAt))),
-                                  DataCell(Text(sale.customerName ?? 'Umum')),
-                                  DataCell(Text(sale.cashierName ?? '-')),
-                                  DataCell(Text(formatRupiah(sale.total))),
-                                ]),
-                            ],
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              columns: const [
+                                DataColumn(label: Text('Invoice')),
+                                DataColumn(label: Text('Tanggal')),
+                                DataColumn(label: Text('Pembeli')),
+                                DataColumn(label: Text('Kasir')),
+                                DataColumn(label: Text('Total'), numeric: true),
+                              ],
+                              rows: [
+                                for (final sale in sales)
+                                  DataRow(cells: [
+                                    DataCell(Text(sale.invoiceNo)),
+                                    DataCell(Text(formatDateTime(sale.createdAt))),
+                                    DataCell(Text(sale.customerName ?? 'Umum')),
+                                    DataCell(Text(sale.cashierName ?? '-')),
+                                    DataCell(Text(formatRupiah(sale.total))),
+                                  ]),
+                              ],
+                            ),
                           ),
                         ),
                       ),

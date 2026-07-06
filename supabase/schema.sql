@@ -9,7 +9,7 @@ create extension if not exists "pgcrypto";
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
   full_name text not null default '',
-  role text not null default 'kasir' check (role in ('admin', 'kasir')),
+  role text not null default 'kasir' check (role in ('admin', 'kasir', 'pegawai')),
   created_at timestamptz not null default now()
 );
 
@@ -24,6 +24,18 @@ set search_path = public
 as $$
   select exists (
     select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+create or replace function public.is_pegawai()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'pegawai'
   );
 $$;
 
@@ -49,7 +61,7 @@ create trigger on_auth_user_created
   for each row execute function public.handle_new_user();
 
 create policy "profiles_select" on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
+  for select using (auth.uid() = id or public.is_admin() or public.is_pegawai());
 
 create policy "profiles_update" on public.profiles
   for update using (auth.uid() = id or public.is_admin());
@@ -131,10 +143,15 @@ create table public.sales (
   customer_id uuid references public.customers (id),
   cashier_id uuid not null references public.profiles (id),
   total numeric(14, 2) not null default 0,
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'qris')),
+  amount_paid numeric(14, 2),
   needs_shipping boolean not null default false,
   shipping_status text not null default 'tidak_perlu'
     check (shipping_status in ('tidak_perlu', 'belum_dikirim', 'dikirim', 'selesai')),
   shipping_note text,
+  assigned_to uuid references public.profiles (id),
+  delivered_by uuid references public.profiles (id),
+  delivered_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -161,11 +178,34 @@ create policy "sales_insert" on public.sales
 create policy "sales_update" on public.sales
   for update using (public.is_admin()) with check (public.is_admin());
 
+-- Pegawai (delivery staff) only see/act on sales explicitly assigned to
+-- them by an admin or kasir. Combined (OR'd) with sales_select / sales_update
+-- above rather than replacing them.
+create policy "sales_select_pegawai" on public.sales
+  for select using (public.is_pegawai() and assigned_to = auth.uid());
+
+-- The "shipping_status <> 'selesai'" guard is on USING (the row's current
+-- state) only, never WITH CHECK — otherwise transitioning *into* 'selesai'
+-- would be blocked too. Once a delivery is marked done it becomes read-only
+-- for pegawai/kasir; only admin (sales_update above) can still correct it.
+create policy "sales_update_pegawai" on public.sales
+  for update using (public.is_pegawai() and assigned_to = auth.uid() and shipping_status <> 'selesai')
+  with check (public.is_pegawai() and assigned_to = auth.uid());
+
+-- Kasir can also update shipping status/note/assignment on sales they
+-- personally rang up (still gated by needs_shipping so they can't touch
+-- anything else).
+create policy "sales_update_kasir_own_shipment" on public.sales
+  for update using (cashier_id = auth.uid() and needs_shipping and shipping_status <> 'selesai')
+  with check (cashier_id = auth.uid() and needs_shipping);
+
 create policy "sale_items_select" on public.sale_items
   for select using (
     public.is_admin() or exists (
       select 1 from public.sales s
-      where s.id = sale_items.sale_id and s.cashier_id = auth.uid()
+      where s.id = sale_items.sale_id and (
+        s.cashier_id = auth.uid() or (public.is_pegawai() and s.assigned_to = auth.uid())
+      )
     )
   );
 
@@ -180,7 +220,9 @@ create or replace function public.create_sale(
   p_customer_id uuid,
   p_items jsonb,
   p_needs_shipping boolean default false,
-  p_shipping_note text default null
+  p_shipping_note text default null,
+  p_payment_method text default 'cash',
+  p_amount_paid numeric default null
 )
 returns uuid
 language plpgsql
@@ -204,15 +246,20 @@ begin
     raise exception 'Keranjang masih kosong';
   end if;
 
+  if p_payment_method not in ('cash', 'qris') then
+    raise exception 'Metode pembayaran tidak valid';
+  end if;
+
   v_invoice := 'INV-' || to_char(nextval('public.sales_invoice_seq'), 'FM000000');
 
   insert into public.sales (
-    invoice_no, customer_id, cashier_id, total, needs_shipping, shipping_status, shipping_note
+    invoice_no, customer_id, cashier_id, total, needs_shipping, shipping_status, shipping_note,
+    payment_method, amount_paid
   )
   values (
     v_invoice, p_customer_id, auth.uid(), 0, p_needs_shipping,
     case when p_needs_shipping then 'belum_dikirim' else 'tidak_perlu' end,
-    p_shipping_note
+    p_shipping_note, p_payment_method, p_amount_paid
   )
   returning id into v_sale_id;
 
@@ -247,13 +294,17 @@ begin
     where id = v_product.id;
   end loop;
 
+  if p_payment_method = 'cash' and (p_amount_paid is null or p_amount_paid < v_total) then
+    raise exception 'Nominal pembayaran tunai kurang dari total belanja';
+  end if;
+
   update public.sales set total = v_total where id = v_sale_id;
 
   return v_sale_id;
 end;
 $$;
 
-grant execute on function public.create_sale(uuid, jsonb, boolean, text) to authenticated;
+grant execute on function public.create_sale(uuid, jsonb, boolean, text, text, numeric) to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Expenses (Pengeluaran) and Restocks (Belanja Bahan) — schema ready now,

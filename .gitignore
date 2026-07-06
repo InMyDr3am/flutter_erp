@@ -50,7 +50,7 @@ app.*.map.json
 !**/README.md
 
 # Environment / secrets
-.env
+app.env
 
 # Local tooling config (not part of the app)
 .claude/
