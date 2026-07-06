@@ -48,3 +48,9 @@ app.*.map.json
 # Markdown files (may contain personal notes/prompts) - keep README.md
 *.md
 !**/README.md
+
+# Environment / secrets
+.env
+
+# Local tooling config (not part of the app)
+.claude/
